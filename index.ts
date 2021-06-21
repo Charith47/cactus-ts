@@ -1,11 +1,24 @@
 import Discord from 'discord.js';
 import * as config from './config.json';
-import MediaPlayer from './MediaPlayer';
-import { sendMessage, replyToMessage, reactToMessage } from './MessageHandler';
+import fs from 'fs';
+import path from 'path';
+import { replyToMessage } from './message-handler';
 
-const bot = new Discord.Client();
+export const bot = new Discord.Client();
+bot.commands = new Discord.Collection();
+
 const prefix = config.BOT_PREFIX;
-const serverList = new Map();
+
+const commandPath = path.resolve(__dirname, './commands');
+
+const commandFiles = fs
+	.readdirSync(commandPath)
+	.filter((file) => file.endsWith('.js'));
+
+for (const file of commandFiles) {
+	const command = require(`./commands/${file}`);
+	bot.commands.set(command.name, command);
+}
 
 bot.login(config.BOT_TOKEN);
 
@@ -13,18 +26,25 @@ bot.once('ready', () => {
 	console.log('🌵 Cactus the bot is online!');
 });
 
-bot.on('message', async (message) => {
-	// if the message is from the bot, ignore it
-	// if the message does not start with prefix, ignore it
-	// else, check if the message matches existing patterns
-	if (message.author.bot) return;
-	if (!message.content.startsWith(prefix)) return;
-	else {
-		// set the server id -> put it in the map
-		const serverId = message.guild?.id;
-		if (serverList.get(serverId) === undefined)
-			serverList.set(serverId, new MediaPlayer(message));
-		if(message.content.startsWith(`${prefix}play`))
-			serverList.get(serverId).searchYt(message.content);
+bot.on('message', (message) => {
+	if (!message.content.startsWith(prefix) || message.author.bot) return;
+
+	const args = message.content.slice(prefix.length).trim().split(/ +/);
+	const commandName = args.shift()?.toLowerCase();
+
+	if (!bot.commands.has(commandName)) return;
+	const command = bot.commands.get(commandName);
+
+	try {
+		command?.execute(message, args);
+	} catch (error) {
+		console.log(error);
+		replyToMessage(message, 'Something went wrong :(');
 	}
 });
+
+// ping ✅
+// play ✅
+// pause ✅
+// resume ✅
+// stop ✅
